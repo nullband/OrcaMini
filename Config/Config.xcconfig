@@ -1,0 +1,13 @@
+// The only file you need to edit to build OrcaMini.
+//
+// 1. TEAM_ID: your Apple developer team (a free Apple ID works). In Xcode: Settings > Accounts > your Apple ID > Team ID,
+//    or open the project, select the OrcaMini target > Signing & Capabilities > Team, and copy the ID.
+//    Leave it empty to build for the simulator only.
+TEAM_ID =
+
+// 2. BUNDLE_ID_PREFIX: must be unique to you. Use something like com.yourname.orcamini
+BUNDLE_ID_PREFIX = com.example.orcamini
+
+// Optional: the name shown on the home screen and in AUM / Drambo.
+APP_DISPLAY_NAME = OrcaMini
+AU_MAKER_NAME = Community
