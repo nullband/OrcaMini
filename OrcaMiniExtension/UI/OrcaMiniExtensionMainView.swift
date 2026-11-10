@@ -16,7 +16,7 @@ struct OrcaMiniExtensionMainView: View {
     var parameterTree: ObservableAUParameterGroup
     @ObservedObject var runtime: OrcaRuntime
 
-    @State private var showKeys = true
+    @State private var showKeys = false        // the keyboard stays closed until asked for
     @State private var selMode = false        // arrows scale the selection instead of moving the cursor (Orca: Shift+arrows)
     @State private var dragMode = false       // arrows drag the selected block (Orca: Alt+arrows)
     @State private var leap = false           // arrows jump a whole grid width/height (Orca: Cmd+arrows)
@@ -56,23 +56,56 @@ struct OrcaMiniExtensionMainView: View {
         }
     }
 
-    // MARK: top bar
+    // MARK: top bar - one row when it fits, otherwise two; nothing ever wraps
     private var topBar: some View {
+        ViewThatFits(in: .horizontal) { wideBar; compactBar }
+            .background(Color(white: 0.08))
+    }
+    private func label(_ t: String, _ size: CGFloat, _ weight: Font.Weight, _ color: Color) -> some View {
+        Text(t).font(.system(size: size, weight: weight, design: .monospaced)).foregroundColor(color).lineLimit(1).fixedSize()
+    }
+    private var titleView: some View { label("ORCA·MINI", 13, .heavy, mint) }
+    private func statusView(short: Bool) -> some View {
         let s = runtime.snapshot
-        return HStack(spacing: 10) {
-            Text("ORCA·MINI").font(.system(size: 13, weight: .heavy, design: .monospaced)).foregroundColor(mint)
-            Text(s.playing ? "▶ \(s.frame)f" : "■ host stopped").font(.system(size: 11, design: .monospaced)).foregroundColor(s.playing ? mint : dim)
-            Spacer()
+        return label(s.playing ? "▶ \(s.frame)f" : (short ? "■" : "■ host stopped"), 11, .regular, s.playing ? mint : dim)
+    }
+    private var speedView: some View {
+        let s = runtime.snapshot
+        return HStack(spacing: 6) {
             barButton("<") { runtime.speedDown() }
-            Text(speedNames[max(0, min(7, s.speed))]).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundColor(amber).frame(minWidth: 40)
+            label(speedNames[max(0, min(7, s.speed))], 12, .semibold, amber).frame(minWidth: 36)
             barButton(">") { runtime.speedUp() }
+        }
+    }
+    private var toolsView: some View {
+        HStack(spacing: 6) {
             fileMenu
             barButton("↶") { runtime.edit { $0.undo() } }
             barButton("↷") { runtime.edit { $0.redo() } }
+            octMenu
             barButton(showKeys ? "⌨︎ ▾" : "⌨︎ ▴") { showKeys.toggle() }
         }
+    }
+    private var wideBar: some View {
+        HStack(spacing: 10) { titleView; statusView(short: false); Spacer(minLength: 8); speedView; toolsView }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+    }
+    private var compactBar: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) { titleView; statusView(short: true); Spacer(minLength: 4); speedView }
+            HStack(spacing: 0) { Spacer(minLength: 0); toolsView; Spacer(minLength: 0) }
+        }
         .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(Color(white: 0.08))
+    }
+    private var octMenu: some View {
+        Menu {
+            Picker("Lowest octave", selection: Binding(get: { runtime.octLo }, set: { runtime.setOctaveRange(lo: $0, hi: runtime.octHi) })) { ForEach(0...8, id: \.self) { Text("Lowest: \($0)").tag($0) } }
+            Picker("Highest octave", selection: Binding(get: { runtime.octHi }, set: { runtime.setOctaveRange(lo: runtime.octLo, hi: $0) })) { ForEach(0...8, id: \.self) { Text("Highest: \($0)").tag($0) } }
+            Button("Full range (0–8)") { runtime.setOctaveRange(lo: 0, hi: 8) }
+        } label: {
+            label(runtime.octLo == 0 && runtime.octHi == 8 ? "OCT" : "OCT \(runtime.octLo)–\(runtime.octHi)", 13, .bold, runtime.octLo == 0 && runtime.octHi == 8 ? .white : amber)
+                .padding(.horizontal, 10).padding(.vertical, 5).background(Color(white: 0.18)).cornerRadius(5)
+        }
     }
 
     private var fileMenu: some View {
@@ -83,7 +116,7 @@ struct OrcaMiniExtensionMainView: View {
             Button("Export…") { if let u = runtime.exportFile(named: "patch-" + Self.stamp()) { shareItem = ShareItem(url: u) } }
             Button("Import…") { showImporter = true }
         } label: {
-            Text("FILE").font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(.white)
+            label("FILE", 13, .bold, .white)
                 .padding(.horizontal, 10).padding(.vertical, 5).background(Color(white: 0.18)).cornerRadius(5)
         }
     }
@@ -93,7 +126,7 @@ struct OrcaMiniExtensionMainView: View {
 
     private func barButton(_ title: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundColor(.white)
+            label(title, 14, .bold, .white)
                 .padding(.horizontal, 10).padding(.vertical, 5).background(Color(white: 0.18)).cornerRadius(5)
         }.buttonStyle(.plain)
     }

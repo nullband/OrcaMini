@@ -45,6 +45,8 @@ To try it without a device, build for an iOS Simulator (leave `TEAM_ID` empty). 
 - **⌨︎** shows or hides the on-screen keyboard (glyph keys, arrows, copy, paste, and so on).
 - `<` `>` change how fast the grid runs relative to the host tempo.
 - **FILE** has New, Save, Load, Export and Import.
+- **OCT** sets the lowest and highest octave (Orca's octave numbers, 0 to 8). A note outside the range is moved by whole octaves into it, so the note name stays the same; 0 to 8 leaves every note alone. The setting is saved with the host session.
+- A new instance opens with an empty grid and the keyboard closed. A saved host session brings its patch back.
 - Load the example patches: **FILE > Import...** and choose files from the `Patches/` folder (put them in the Files app first, for example by AirDrop or iCloud).
 
 Notes on the differences from desktop Orca:

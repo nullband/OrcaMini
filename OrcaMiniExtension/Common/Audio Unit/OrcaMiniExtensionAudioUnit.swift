@@ -69,10 +69,11 @@ public class OrcaMiniExtensionAudioUnit: AUAudioUnit, @unchecked Sendable {
 
     // the patch is saved inside the host's session (AUM / Drambo project)
     public override var fullState: [String: Any]? {
-        get { var s = super.fullState ?? [:]; s["orcaPatch"] = runtime.patchText(); return s }
+        get { var s = super.fullState ?? [:]; s["orcaPatch"] = runtime.patchText(); s["orcaOctLo"] = runtime.octLo; s["orcaOctHi"] = runtime.octHi; return s }
         set {
             super.fullState = newValue
             if let t = newValue?["orcaPatch"] as? String { runtime.loadPatch(t) }
+            if let lo = newValue?["orcaOctLo"] as? Int, let hi = newValue?["orcaOctHi"] as? Int { runtime.setOctaveRange(lo: lo, hi: hi) }
         }
     }
 

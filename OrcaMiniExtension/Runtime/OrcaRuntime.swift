@@ -24,7 +24,7 @@ struct GridSnapshot: Equatable {
 
 final class OrcaRuntime: ObservableObject, @unchecked Sendable {
     static let gridW = 36, gridH = 16                       // the mini grid (one constant: easy to change)
-    static let defaultPatch = ".1D4......\n...:03C...\n"   // C every 4 frames: a smoke test that proves MIDI out
+    static let defaultPatch = ""                            // a fresh instance opens blank (the host restores a saved session's patch through fullState)
 
     let engine = OrcaEngine(seed: UInt32(truncatingIfNeeded: UInt64(Date().timeIntervalSince1970 * 1000)))
     let editor: OrcaEditor
@@ -36,6 +36,31 @@ final class OrcaRuntime: ObservableObject, @unchecked Sendable {
     private let lookahead = 4
 
     @Published private(set) var snapshot = GridSnapshot()
+    // octave limits, in Orca's own octave numbers (0...8): any note outside is moved by whole octaves into range (folded), so the pitch name stays the same
+    @Published private(set) var octLo = 0
+    @Published private(set) var octHi = 8
+    private var foldMap = [Int16](repeating: -1, count: 16 * 128)      // channel/note as Orca sent it -> the note actually sent, so a note-off always matches its note-on even if the range changes while it sounds
+    func setOctaveRange(lo: Int, hi: Int) {
+        let l = max(0, min(8, lo)), h = max(l, min(8, hi))
+        lock.lock(); octLo = l; octHi = h; editRevision += 1; lock.unlock()
+        DispatchQueue.main.async { [weak self] in self?.objectWillChange.send() }
+    }
+    /// call with the lock held
+    private func limitOctaves(_ msgs: [MidiMessage], track: Bool) -> [MidiMessage] {
+        let lo = octLo == 0 ? 0 : 24 + 12 * octLo, hi = octHi == 8 ? 127 : 24 + 12 * octHi + 11      // (the full range leaves every note alone)
+        return msgs.map { m in
+            guard m.bytes.count >= 2 else { return m }
+            let kind = m.bytes[0] & 0xF0, ch = Int(m.bytes[0] & 0x0F), note = Int(m.bytes[1])
+            let isOn = kind == 0x90 && (m.bytes.count < 3 || m.bytes[2] > 0), isOff = kind == 0x80 || (kind == 0x90 && !isOn)
+            guard isOn || isOff, note < 128 else { return m }
+            var x = note; while x < lo { x += 12 }; while x > hi { x -= 12 }; x = max(0, min(127, x))
+            let slot = ch * 128 + note; var out = x
+            if track {
+                if isOn { foldMap[slot] = Int16(x) } else if foldMap[slot] >= 0 { out = Int(foldMap[slot]); foldMap[slot] = -1 }
+            }
+            var b = m.bytes; b[1] = UInt8(out); return MidiMessage(b)
+        }
+    }
 
     init(kernel: OrcaKernelRef) {
         self.kernel = kernel
@@ -89,7 +114,7 @@ final class OrcaRuntime: ObservableObject, @unchecked Sendable {
             if playing {
                 var guardN = 0
                 while OrcaKernelDepth(kernel) < Int32(lookahead) && guardN < 16 {
-                    lock.lock(); let msgs = engine.step(); lock.unlock()
+                    lock.lock(); let msgs = limitOctaves(engine.step(), track: true); lock.unlock()
                     var n = 0
                     for m in msgs where n + 3 <= buf.count {
                         buf[n] = m.bytes[0]; buf[n + 1] = m.bytes.count > 1 ? m.bytes[1] : 0; buf[n + 2] = m.bytes.count > 2 ? m.bytes[2] : 0; n += 3
@@ -104,7 +129,7 @@ final class OrcaRuntime: ObservableObject, @unchecked Sendable {
                 if spec == nil || specRevision != editRevision {
                     let c = engine.cloneForPreview()
                     var bytes: [UInt8] = [], lens: [Int32] = []
-                    for _ in 0..<4 { lens.append(pack(c.step(), into: &bytes)) }
+                    for _ in 0..<4 { lens.append(pack(limitOctaves(c.step(), track: false), into: &bytes)) }
                     spec = c; specRevision = editRevision
                     lock.unlock()
                     bytes.withUnsafeBufferPointer { b in lens.withUnsafeBufferPointer { l in OrcaKernelSetStartFrames(kernel, b.baseAddress, l.baseAddress, 4) } }
